@@ -31,13 +31,3 @@ class Instance:
         return (
             self.arguments if isinstance(self.arguments, tuple) else (self.arguments,)
         )
-
-    @args.setter
-    def args(self, new_arguments: tuple) -> None:
-        """
-        Update the argument of the instance with a new one
-        """
-        if isinstance(new_arguments, tuple):
-            self.arguments = new_arguments
-        else:
-            raise TypeError(f".... new arguments must be an tuple")

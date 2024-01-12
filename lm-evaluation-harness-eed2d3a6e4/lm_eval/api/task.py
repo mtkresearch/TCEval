@@ -28,6 +28,7 @@ from lm_eval.api.registry import (
 )
 from lm_eval.filters import build_filter_ensemble
 from lm_eval.prompts import get_prompt
+from lm_eval.models.conversation import get_conv_template
 
 
 ALL_OUTPUT_TYPES = [
@@ -80,6 +81,11 @@ class TaskConfig(dict):
     filter_list: Union[str, list] = None
     should_decontaminate: bool = False
     doc_to_decontamination_query: str = None
+    # HACK: Added options for reformating fewshots into chat template
+    fewshot_method: str = "default" # default | chat_iteration
+    conv_template: str = None
+    system_message: str = None
+
 
     metadata: Union[
         str, list
@@ -423,6 +429,79 @@ class Task(abc.ABC):
         """Downstream loglikelihood_rolling perplexity tasks with custom word boundaries should override this!"""
         return len(re.split(r"\s+", doc))
 
+    # HACK: Added for constructing answers correctly
+    @abc.abstractmethod
+    def doc_to_choice(self, doc: Any) -> List[str]:
+        pass
+
+    def _format_ans(self, cand_doc):
+        # HACK: Copy & paste from sampler.get_context()
+        return (
+            str(self.doc_to_target(cand_doc)[0])
+            if isinstance(self.doc_to_target(cand_doc), list)
+            else self.doc_to_target(cand_doc)
+            if (
+                self.config.doc_to_choice is None
+                or isinstance(self.doc_to_target(cand_doc), str)
+            )
+            else str(self.doc_to_choice(cand_doc)[self.doc_to_target(cand_doc)])
+            )
+
+
+    def _fewshot_context_w_default(self, example, fewshotex, description):
+        description = description if description else ""
+        labeled_examples = (
+            "\n\n".join(
+                [
+                    self.doc_to_text(fdoc) + self._format_ans(fdoc)
+                    for fdoc in fewshotex
+                ]
+            )
+            + "\n\n"
+        )
+        return description + labeled_examples + example
+
+    def _fewshot_context_w_chat(self, example, fewshotex, description):
+        r"""
+        Reformat fewshot examples into chat template
+        """
+        conv = get_conv_template(self.config.conv_template)
+        if self.config.system_message is not None:
+            conv.set_system_message(self.config.system_message)
+        
+        description = description if description else ""
+
+        if len(fewshotex) == 0:
+            labeled_examples = ""
+            context = description + labeled_examples + example
+            conv.append_message(conv.roles[0], context)
+            conv.append_message(conv.roles[1], None)
+            eval_logger.debug(conv)
+            return conv.get_prompt()
+
+        if self.config.fewshot_method == "chat":
+            context = self._fewshot_context_w_default(example, fewshotex, description)
+            conv.append_message(conv.roles[0], context)
+            conv.append_message(conv.roles[1], None)
+            eval_logger.debug(conv)
+            return conv.get_prompt()
+
+        elif self.config.fewshot_method == "chat_iteration":
+            # construct fewshot examples into chat iterations
+            for i, ftex in enumerate(fewshotex):
+                context = self.doc_to_text(ftex)
+                if i == 0:
+                    context = description + context
+                conv.append_message(conv.roles[0], context) 
+                conv.append_message(conv.roles[1], self._format_ans(ftex))
+
+            conv.append_message(conv.roles[0], example)
+            conv.append_message(conv.roles[1], None)
+            eval_logger.debug(conv)
+            return conv.get_prompt()
+        else:
+            raise KeyError(f".... fewshot method - {self.config.fewshot_method} - not found")
+
     @utils.positional_deprecated
     def fewshot_context(
         self,
@@ -452,37 +531,37 @@ class Task(abc.ABC):
 
         description = description if description else ""
 
-        if num_fewshot == 0:
-            labeled_examples = ""
-        else:
-            # for sets with no training docs, draw from other set *but ensure no overlap with current doc*
-            if self.has_training_docs():
-                fewshotex = self.fewshot_examples(k=num_fewshot, rnd=rnd)
-            else:
-                if self._fewshot_docs is None:
-                    self._fewshot_docs = list(
-                        self.validation_docs()
-                        if self.has_validation_docs()
-                        else self.test_docs()
-                    )
-
-                fewshotex = rnd.sample(self._fewshot_docs, num_fewshot + 1)
-
-                # get rid of the doc that's the one we're evaluating, if it's in the fewshot
-                fewshotex = [x for x in fewshotex if x != doc][:num_fewshot]
-
-            labeled_examples = (
-                "\n\n".join(
-                    [
-                        self.doc_to_text(doc) + self.doc_to_target(doc)
-                        for doc in fewshotex
-                    ]
-                )
-                + "\n\n"
-            )
-
         example = self.doc_to_text(doc)
-        return description + labeled_examples + example
+        # Handle zero shot
+        if num_fewshot == 0:
+            if self.config.conv_template is not None:
+                return self._fewshot_context_w_chat(example, [], description)
+
+            return self._fewshot_context_w_default(example, [], description)
+
+        # Handle fewshot
+        # for sets with no training docs, draw from other set *but ensure no overlap with current doc*
+        fewshotex = []
+        if self.has_training_docs():
+            fewshotex = self.fewshot_examples(k=num_fewshot, rnd=rnd)
+        else:
+            if self._fewshot_docs is None:
+                self._fewshot_docs = list(
+                    self.validation_docs()
+                    if self.has_validation_docs()
+                    else self.test_docs()
+                )
+
+            fewshotex = rnd.sample(self._fewshot_docs, num_fewshot + 1)
+
+            # get rid of the doc that's the one we're evaluating, if it's in the fewshot
+            fewshotex = [x for x in fewshotex if x != doc][:num_fewshot]
+
+
+        if self.config.conv_template is not None:
+            return self._fewshot_context_w_chat(example, fewshotex, description)
+        
+        return self._fewshot_context_w_default(example, fewshotex, description)
 
     def apply_filters(self):
         if hasattr(self, "_filters"):
@@ -778,6 +857,26 @@ class ConfigurableTask(Task):
             The fewshot context.
         """
 
+        example = self.doc_to_text(doc)
+        if self.config.conv_template is not None and self.config.fewshot_method == "chat_iteration":
+            fewshotex = []
+            if num_fewshot > 0:
+                fewshotex = self.sampler.custom_sample(doc, num_fewshot)
+
+            if isinstance(example, str):
+                return self._fewshot_context_w_chat(example, fewshotex, self.config.description)
+            elif isinstance(example, list):
+                return [self._fewshot_context_w_chat(ex, fewshotex, self.config.description) for ex in example]
+            elif isinstance(example, int):
+                if self.config.doc_to_choice is not None:
+                    choices = self.doc_to_choice(doc)
+                    return self._fewshot_context_w_chat(choices[example], fewshotex, self.config.description)
+                    # return labeled_examples + choices[example]
+                else:
+                    return self._fewshot_context_w_chat(str(example), fewshotex, self.config.description)
+                    # return labeled_examples + str(example)
+
+
         if num_fewshot == 0:
             # always prepend the (possibly empty) task description
             labeled_examples = self.config.description
@@ -786,20 +885,16 @@ class ConfigurableTask(Task):
                 doc, num_fewshot
             )
 
-        example = self.doc_to_text(doc)
-        if self.multiple_input:
-            return labeled_examples
-        else:
-            if isinstance(example, str):
-                return labeled_examples + example
-            elif isinstance(example, list):
-                return [labeled_examples + ex for ex in example]
-            elif isinstance(example, int):
-                if self.config.doc_to_choice is not None:
-                    choices = self.doc_to_choice(doc)
-                    return labeled_examples + choices[example]
-                else:
-                    return labeled_examples + str(example)
+        if isinstance(example, str):
+            return labeled_examples + example
+        elif isinstance(example, list):
+            return [labeled_examples + ex for ex in example]
+        elif isinstance(example, int):
+            if self.config.doc_to_choice is not None:
+                choices = self.doc_to_choice(doc)
+                return labeled_examples + choices[example]
+            else:
+                return labeled_examples + str(example)
 
     def apply_filters(self):
         if hasattr(self, "_filters"):
@@ -955,9 +1050,7 @@ class ConfigurableTask(Task):
             if self.multiple_input:
                 # If there are multiple inputs, choices are placed in the ctx
                 cont = self.doc_to_target(doc)
-                arguments = [
-                    (ctx + choice, f"{target_delimiter}{cont}") for choice in choices
-                ]
+                arguments = [(ctx, f"{target_delimiter}{cont}") for ctx in choices]
             else:
                 # Otherwise they are placed in the continuation
                 arguments = [(ctx, f"{target_delimiter}{cont}") for cont in choices]
@@ -1131,36 +1224,27 @@ class ConfigurableTask(Task):
                         # sometimes, a multiple_target dataset has exceptions where one doc has only one string answer
                         # print(gold)
                         gold = [gold]
-                    if metric == "exact_match":
-                        result = [result for _ in range(len(gold))]
-                        scores = self._metric_fn_list[metric](
-                            references=gold,
-                            predictions=result,
-                            **self._metric_fn_kwargs[metric],
-                        )[metric]
-                        result_score = 1.0 if scores > 0.0 else 0.0
+                    for gold_option in gold:
+                        try:
+                            result_score = self._metric_fn_list[metric](
+                                references=[gold_option],
+                                predictions=[result],
+                                **self._metric_fn_kwargs[metric],
+                            )
+                        except (
+                            TypeError
+                        ):  # TODO: this is hacky and I don't want to do it
+                            result_score = self._metric_fn_list[metric](
+                                [gold_option, result]
+                            )
+                        if isinstance(result_score, dict):
+                            # TODO: this handles the case where HF evaluate returns a dict.
+                            result_score = result_score[metric]
+                        scores.append(result_score)
+                    if any(scores):
+                        result_score = 1.0
                     else:
-                        for gold_option in gold:
-                            try:
-                                result_score = self._metric_fn_list[metric](
-                                    references=[gold_option],
-                                    predictions=[result],
-                                    **self._metric_fn_kwargs[metric],
-                                )
-                            except (
-                                TypeError
-                            ):  # TODO: this is hacky and I don't want to do it
-                                result_score = self._metric_fn_list[metric](
-                                    [gold_option, result]
-                                )
-                            if isinstance(result_score, dict):
-                                # TODO: this handles the case where HF evaluate returns a dict.
-                                result_score = result_score[metric]
-                            scores.append(result_score)
-                        if any(scores):
-                            result_score = 1.0
-                        else:
-                            result_score = 0.0
+                        result_score = 0.0
                 else:
                     try:
                         result_score = self._metric_fn_list[metric](

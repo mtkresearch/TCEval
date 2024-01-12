@@ -136,6 +136,34 @@ def parse_eval_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--conv_template",
+        type=str,
+        default=None,
+        help=(
+            "Conversation template for a chat model,"
+            " e.g. `mistral, llama-2, Yi-34b-chat, qwen-7b-chat`. See lm_eval.models.conversation"
+        ),
+    )
+    parser.add_argument(
+        "--system_message",
+        type=str,
+        default=None,
+        help=(
+            "System message for chat models. If set to None, will use the default system message defined by each model. See lm_eval.models.conversation"
+        ),
+    )
+    parser.add_argument(
+        "--fewshot_method",
+        type=str,
+        default='default',
+        choices=["default", "chat", "chat_iteration"],
+        help=(
+            "Fewshot context construction method. Available only to hf model. Options = [default, chat_iteration]\n" 
+            "\"default\" is \n```{description} Q:q1_sen\nA:a1\nQ:q2_sen\nA:a2\n\nQ:q3_sen\nA:```\n" 
+            "\"chat_iteration\" is (llama template for example) \n```[INST]\n<SYS>\n{system_message}\n</SYS>\nQ:q1_sen[/INST]</s>[INST]A:a1[/INST]</s>[INST]Q:q2_sen[/INST]</s>[INST]A:a2[/INST]</s>[INST]Q:q3_sen[/INST]</s>[INST]A:```"
+        ),
+    )
+    parser.add_argument(
         "--verbosity",
         "-v",
         type=str.upper,
@@ -228,6 +256,9 @@ def cli_evaluate(args: Union[argparse.Namespace, None] = None) -> None:
 
     eval_logger.info(f"Selected Tasks: {task_names}")
 
+    if args.conv_template is not None:
+        assert args.model == "hf", f".... only hf model is supported atm"
+
     results = evaluator.simple_evaluate(
         model=args.model,
         model_args=args.model_args,
@@ -243,14 +274,15 @@ def cli_evaluate(args: Union[argparse.Namespace, None] = None) -> None:
         write_out=args.write_out,
         log_samples=args.log_samples,
         gen_kwargs=args.gen_kwargs,
+        conv_template=args.conv_template,
+        fewshot_method=args.fewshot_method,
+        system_message=args.system_message
     )
 
     if results is not None:
         if args.log_samples:
             samples = results.pop("samples")
-        dumped = json.dumps(
-            results, indent=2, default=_handle_non_serializable, ensure_ascii=False
-        )
+        dumped = json.dumps(results, indent=2, default=_handle_non_serializable)
         if args.show_config:
             print(dumped)
 
@@ -266,12 +298,9 @@ def cli_evaluate(args: Union[argparse.Namespace, None] = None) -> None:
                     )
                     filename = path.joinpath(f"{output_name}.jsonl")
                     samples_dumped = json.dumps(
-                        samples[task_name],
-                        indent=2,
-                        default=_handle_non_serializable,
-                        ensure_ascii=False,
+                        samples[task_name], indent=2, default=_handle_non_serializable
                     )
-                    filename.write_text(samples_dumped, encoding="utf-8")
+                    filename.open("w").write(samples_dumped)
 
         print(
             f"{args.model} ({args.model_args}), gen_kwargs: ({args.gen_kwargs}), limit: {args.limit}, num_fewshot: {args.num_fewshot}, "

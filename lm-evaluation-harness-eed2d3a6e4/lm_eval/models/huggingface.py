@@ -22,8 +22,6 @@ from lm_eval.api.model import LM
 from lm_eval.api.registry import register_model
 from lm_eval.utils import Collator, stop_sequences_criteria
 
-from lm_eval.models.conversation import get_conv_template
-
 
 eval_logger = utils.eval_logger
 
@@ -98,14 +96,10 @@ class HFLM(LM):
         # PEFT and quantization options
         peft: Optional[str] = None,
         autogptq: Optional[Union[bool, str]] = False,
-        conv_template: str = None,
-        system_message: str = None,
         **kwargs,
     ) -> None:
         super().__init__()
-        # HACK: for chat model
-        self.conv_template = conv_template
-        self.system_message = system_message
+
         # optionally: take in an already-initialized transformers.PreTrainedModel
         if not isinstance(pretrained, str):
             eval_logger.warning(
@@ -668,30 +662,6 @@ class HFLM(LM):
             return self.tokenizer.decode(tokens)
         elif self.AUTO_MODEL_CLASS == transformers.AutoModelForSeq2SeqLM:
             return self.tokenizer.decode(tokens, skip_special_tokens=True)
-    
-    def tok_wrap_chat_template(self, requests: List[Instance]) -> List[Instance]:
-        new_reqs = []
-        for req in requests:
-            context, continuation = req.args[0].strip(), req.args[1]
-            if isinstance(continuation, str):
-                continuation = continuation.strip()
-
-            conv = get_conv_template(self.conv_template)
-            if self.system_message is not None:
-                conv.set_system_message(self.system_message)
-            
-            conv.append_message(conv.roles[0], context)
-            conv.append_message(conv.roles[1], None)
-            new_context = conv.get_prompt()
-
-            eval_logger.debug(f".... continuation = {continuation}")
-            eval_logger.debug(f".... context bef chat template = {context}")
-            eval_logger.debug(f".... context after chat template = {new_context}")
-            
-            req.args = (new_context, continuation)
-            new_reqs.append(req)
-        
-        return new_reqs
 
     def _model_call(self, inps, attn_mask=None, labels=None):
         """
@@ -773,11 +743,6 @@ class HFLM(LM):
         return context_enc, continuation_enc
 
     def loglikelihood(self, requests: List[Instance]) -> List[Tuple[float, bool]]:
-
-        if self.conv_template is not None:
-            print("Loglikelihood invoked")
-            requests = self.tok_wrap_chat_template(requests)
-
         new_reqs = []
         for context, continuation in [req.args for req in requests]:
             if context == "":
@@ -1051,11 +1016,6 @@ class HFLM(LM):
         return re_ord.get_original(res)
 
     def generate_until(self, requests: List[Instance]) -> List[str]:
-        if self.conv_template is not None:
-            print("Generate_util invoked")
-            requests = self.tok_wrap_chat_template(requests)
-
-
         res = []
 
         def _collate(x):

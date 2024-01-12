@@ -38,6 +38,9 @@ def simple_evaluate(
     write_out: bool = False,
     log_samples: bool = True,
     gen_kwargs: str = None,
+    conv_template: str = None,
+    fewshot_method: str = "default",
+    system_message: str = None
 ):
     """Instantiate and evaluate a model on a list of tasks.
 
@@ -143,6 +146,13 @@ def simple_evaluate(
                 )
 
                 task_obj._config["num_fewshot"] = num_fewshot
+                task_obj._config["fewshot_method"] = fewshot_method
+                task_obj._config["conv_template"] = conv_template
+
+        if system_message is not None:
+            eval_logger.debug(f".... bake system_message for evaluating {task_name} w/ sys message = {system_message}")
+            task_obj._config['system_message'] = system_message
+
 
     if check_integrity:
         run_task_tests(task_list=tasks)

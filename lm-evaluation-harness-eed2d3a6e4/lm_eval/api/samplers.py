@@ -70,6 +70,23 @@ class ContextSampler:
 
         return self.rnd.sample(self.docs, n)
 
+    def custom_sample(self, doc, num_fewshot):
+        # draw an extra fewshot sample if using same split as evaluating on
+        n_samples = (
+            num_fewshot + 1
+            if self.config.fewshot_split == self.config.test_split
+            else num_fewshot
+        )
+
+        # draw `n_samples` docs from fewshot_docs
+        fewshotex = self.sample(n_samples)
+
+        # get rid of the doc that's the one we're evaluating, if it's in the fewshot
+        # TODO: should we just stop people from using fewshot from same split as evaluating?
+        selected_docs = [x for x in fewshotex if x != doc][:num_fewshot]
+        
+        return selected_docs
+
 
 class FirstNSampler(ContextSampler):
     def sample(self, n) -> None:
