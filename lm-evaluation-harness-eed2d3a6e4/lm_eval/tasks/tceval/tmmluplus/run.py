@@ -1,0 +1,12 @@
+import os
+
+model = "openai-chat-completions"
+model_args = "model=aide-gpt-35-turbo,base_url=\"https://mlop-azure-gateway.mediatek.inc\""
+output_dir = "outputs/gpt35"
+
+tasks = ['tmmluplus-accounting', 'tmmluplus-administrative_law', 'tmmluplus-advance_chemistry', 'tmmluplus-agriculture', 'tmmluplus-anti_money_laundering', 'tmmluplus-auditing', 'tmmluplus-basic_medical_science', 'tmmluplus-business_management', 'tmmluplus-chinese_language_and_literature', 'tmmluplus-clinical_psychology', 'tmmluplus-computer_science', 'tmmluplus-culinary_skills', 'tmmluplus-dentistry', 'tmmluplus-economics', 'tmmluplus-education', 'tmmluplus-education_(profession_level)', 'tmmluplus-educational_psychology', 'tmmluplus-engineering_math', 'tmmluplus-finance_banking', 'tmmluplus-financial_analysis', 'tmmluplus-fire_science', 'tmmluplus-general_principles_of_law', 'tmmluplus-geography_of_taiwan', 'tmmluplus-human_behavior', 'tmmluplus-insurance_studies', 'tmmluplus-introduction_to_law', 'tmmluplus-jce_humanities', 'tmmluplus-junior_chemistry', 'tmmluplus-junior_chinese_exam', 'tmmluplus-junior_math_exam', 'tmmluplus-junior_science_exam', 'tmmluplus-junior_social_studies', 'tmmluplus-logic_reasoning', 'tmmluplus-macroeconomics', 'tmmluplus-management_accounting', 'tmmluplus-marketing_management', 'tmmluplus-mechanical', 'tmmluplus-music', 'tmmluplus-national_protection', 'tmmluplus-nautical_science', 'tmmluplus-occupational_therapy_for_psychological_disorders', 'tmmluplus-official_document_management', 'tmmluplus-optometry', 'tmmluplus-organic_chemistry', 'tmmluplus-pharmacology', 'tmmluplus-pharmacy', 'tmmluplus-physical_education', 'tmmluplus-physics', 'tmmluplus-politic_science', 'tmmluplus-real_estate', 'tmmluplus-secondary_physics', 'tmmluplus-statistics_and_machine_learning', 'tmmluplus-taiwanese_hokkien', 'tmmluplus-taxation', 'tmmluplus-technical', 'tmmluplus-three_principles_of_people', 'tmmluplus-trade', 'tmmluplus-traditional_chinese_medicine_clinical_medicine', 'tmmluplus-trust_practice', 'tmmluplus-ttqav2', 'tmmluplus-tve_chinese_language', 'tmmluplus-tve_design', 'tmmluplus-tve_mathematics', 'tmmluplus-tve_natural_sciences', 'tmmluplus-veterinary_pathology', 'tmmluplus-veterinary_pharmacology']
+
+for task in tasks[:1]:
+    task_name = task.replace('-','_zeroshot-')
+    output_path = os.path.join(output_dir, task_name)
+    os.system(f"lm_eval --model {model} --model_args {model_args} --tasks {task_name} --include_path tasks/tmmluplus --output_path {output_path} --log_samples --limit 0.01")
