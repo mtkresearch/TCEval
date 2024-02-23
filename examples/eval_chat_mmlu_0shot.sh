@@ -5,7 +5,7 @@ safetensor_model_path=MediaTek-Research/Breeze-7B-Instruct-v0_1
 template=breeze
 sys="You are a helpful AI assistant."
 eval_batch=2
-output_path=outputs/chat/mmlu_0shot/Breeze-7B-Instruct-v0_1/
+output_path=outputs/chat/mmlu/0shot/Breeze-7B-Instruct-v0_1/
 tensor_parallel_size=1
 
 lm_eval --model vllm \

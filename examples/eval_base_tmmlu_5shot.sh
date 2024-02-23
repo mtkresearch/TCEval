@@ -3,7 +3,7 @@ set -e
 ### Breeze-7B-Base-v0_1
 safetensor_model_path=MediaTek-Research/Breeze-7B-Base-v0_1
 eval_batch=2
-output_path=outputs/base/tmmlu_5shot/Breeze-7B-Base-v0_1/
+output_path=outputs/base/tmmlu/5shot/Breeze-7B-Base-v0_1/
 tensor_parallel_size=1
 
 lm_eval --model vllm \
