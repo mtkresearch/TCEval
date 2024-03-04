@@ -126,7 +126,10 @@ tmmluplus_tuples = [
     ['other (business, health, misc.)', 'health', 'traditional_chinese_medicine_clinical_medicine', '中醫臨床醫學'],
     ['other (business, health, misc.)', 'health', 'veterinary_pathology', '獸醫病理學'],
     ['other (business, health, misc.)', 'health', 'pharmacology', '藥理學'],
-    ['other (business, health, misc.)', 'health', 'veterinary_pharmacology', '獸醫藥理學']
+    ['other (business, health, misc.)', 'health', 'veterinary_pharmacology', '獸醫藥理學'],
+    ['social sciences', 'education', 'education', '教育'],
+    ['social sciences', 'education', 'education_(profession_level)', '教育_技術'],
+    ['social sciences', 'education', 'physical_education','體育']
 ]
 
 tmmluplus_subject2category = {
