@@ -10,7 +10,7 @@ tensor_parallel_size=1
 
 lm_eval --model vllm \
     --tasks tmmluplus_fewshot \
-    --conv_template ${template} --system_message "${sys}" --fewshot_method default \
+    --conv_template ${template} --system_message "${sys}" --fewshot_method chat_iteration \
     --model_args pretrained=${safetensor_model_path},trust_remote_code=True,tensor_parallel_size=${tensor_parallel_size},dtype=auto,gpu_memory_utilization=0.8 \
     --batch_size ${eval_batch} --output_path  ${output_path} \
     --num_fewshot 0 --log_samples --gen_kwargs temperature=0,top_k=0,top_p=0; 
