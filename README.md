@@ -11,3 +11,10 @@ pip3 install -U vllm
 cd ..
 ```
 
+## Evaluate Local Models (MMLU, TMMLU+, and Penguin_Table)
+
+please reference [examples](./examples/)
+
+## Evaluate API Models (MMLU, TMMLU+, and Penguin_Table)
+
+please check [scripts/cal_likelihood_by_api.py](scripts/cal_likelihood_by_api.py)
