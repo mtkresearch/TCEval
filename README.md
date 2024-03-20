@@ -16,3 +16,7 @@ please reference [examples](./examples/)
 ## Evaluate API Models (MMLU, TMMLU+, and Penguin_Table)
 
 please check [scripts/cal_likelihood_by_api.py](scripts/cal_likelihood_by_api.py)
+
+## Evaluate MTBench-tw
+
+please reference [here](./mt_bench_tw/).
